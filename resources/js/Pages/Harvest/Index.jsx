@@ -27,7 +27,7 @@ export default function Index({ auth, harvests }) {
                                 <div className="flex items-start justify-between mb-3">
                                     <div>
                                         <h3 className="text-sm font-bold text-gray-900">
-                                            {harvest.master_varietas?.nama_varietas || 'Unknown'}
+                                            {harvest.nama_custom || harvest.master_varietas?.nama_varietas || 'Unknown'}
                                         </h3>
                                         <span className="text-[10px] font-mono text-gray-400">
                                             {harvest.kode_batch}

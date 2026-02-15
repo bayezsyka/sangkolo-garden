@@ -1,8 +1,22 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, useForm, router } from '@inertiajs/react'; // Added router
+import { useState } from 'react';
+import Modal from '@/Components/Modal';
+import InputLabel from '@/Components/InputLabel';
+import TextInput from '@/Components/TextInput';
+import InputError from '@/Components/InputError';
 
 export default function Index({ auth, locations }) {
-    
+    const [showManageModal, setShowManageModal] = useState(false);
+    const [viewMode, setViewMode] = useState('list'); // 'list', 'form'
+    const [editingLocation, setEditingLocation] = useState(null);
+
+    const { data, setData, post, processing, errors, reset, clearErrors } = useForm({
+        nama_lokasi: '',
+        kapasitas: '',
+        foto_media: null,
+    });
+
     const calculateAge = (startDate) => {
         if (!startDate) return 0;
         const start = new Date(startDate);
@@ -12,17 +26,71 @@ export default function Index({ auth, locations }) {
         return diffDays;
     };
 
+    const handleOpenManage = () => {
+        setViewMode('list');
+        setShowManageModal(true);
+    };
+
+    const handleCreate = () => {
+        setEditingLocation(null);
+        reset();
+        clearErrors();
+        setViewMode('form');
+    };
+
+    const handleEdit = (loc) => {
+        setEditingLocation(loc);
+        setData({
+            nama_lokasi: loc.nama_lokasi,
+            kapasitas: loc.kapasitas,
+            foto_media: null, // Don't prefill file input
+        });
+        clearErrors();
+        setViewMode('form');
+    };
+
+    const handleDelete = (loc) => {
+        if (confirm('Apakah Anda yakin ingin menghapus lokasi ini?')) {
+            router.delete(route('production.destroy_location', loc.id));
+        }
+    };
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        const routeName = editingLocation ? 'production.update_location' : 'production.store_location';
+        const routeParams = editingLocation ? editingLocation.id : {};
+        
+        post(route(routeName, routeParams), {
+            onSuccess: () => {
+                reset();
+                setViewMode('list');
+                // Optional: keep modal open to manage more
+            },
+        });
+    };
+
     const occupiedCount = locations.filter(loc => loc.batch_tanams && loc.batch_tanams.length > 0).length;
     const emptyCount = locations.length - occupiedCount;
 
     return (
         <AuthenticatedLayout
             header={
-                <div>
-                    <h1 className="text-xl font-bold text-gray-900 tracking-tight">Produksi</h1>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                        {occupiedCount} lokasi aktif · {emptyCount} tersedia
-                    </p>
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h1 className="text-xl font-bold text-gray-900 tracking-tight">Produksi</h1>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                            {occupiedCount} lokasi aktif · {emptyCount} tersedia
+                        </p>
+                    </div>
+                    <button 
+                        onClick={handleOpenManage}
+                        className="btn btn-secondary text-xs gap-1.5"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+                        </svg>
+                        Atur Blok
+                    </button>
                 </div>
             }
         >
@@ -34,6 +102,7 @@ export default function Index({ auth, locations }) {
                         const activeBatch = loc.batch_tanams && loc.batch_tanams.length > 0 ? loc.batch_tanams[0] : null;
                         const isOccupied = !!activeBatch;
                         const age = activeBatch ? calculateAge(activeBatch.tanggal_mulai) : 0;
+                        const batchName = activeBatch ? (activeBatch.nama_custom || activeBatch.master_varietas?.nama_varietas || 'Tanpa Nama') : '';
 
                         return (
                             <div 
@@ -57,7 +126,7 @@ export default function Index({ auth, locations }) {
                                             {/* Variety Info */}
                                             <div className="bg-gray-50 rounded-xl p-3">
                                                 <p className="text-xs font-bold text-gray-900">
-                                                    {activeBatch.master_varietas?.nama_varietas}
+                                                    {batchName}
                                                 </p>
                                                 <p className="text-[10px] text-gray-400 font-mono mt-0.5">
                                                     {activeBatch.kode_batch}
@@ -112,6 +181,126 @@ export default function Index({ auth, locations }) {
                     </div>
                 )}
             </div>
+
+            {/* Modal Manage Blocks */}
+            <Modal show={showManageModal} onClose={() => setShowManageModal(false)}>
+                <div className="p-6">
+                    <div className="flex items-center justify-between mb-6">
+                        <div>
+                            <h2 className="text-lg font-bold text-gray-900">
+                                {viewMode === 'list' ? 'Atur Blok Produksi' : (editingLocation ? 'Edit Blok' : 'Tambah Blok Baru')}
+                            </h2>
+                            <p className="text-xs text-gray-400 mt-1">
+                                {viewMode === 'list' ? 'Kelola daftar lokasi produksi, kapasitas, dan media.' : 'Isi detail lokasi produksi.'}
+                            </p>
+                        </div>
+                        {viewMode === 'form' && (
+                            <button onClick={() => setViewMode('list')} className="text-xs text-gray-500 hover:text-gray-900">
+                                Kembali ke Daftar
+                            </button>
+                        )}
+                    </div>
+
+                    {viewMode === 'list' ? (
+                        <div className="space-y-4">
+                            <button 
+                                onClick={handleCreate}
+                                className="btn btn-primary w-full text-xs justify-center mb-4"
+                            >
+                                <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                                </svg>
+                                Tambah Blok Baru
+                            </button>
+
+                            <div className="max-h-[400px] overflow-y-auto space-y-2">
+                                {locations.map(loc => (
+                                    <div key={loc.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                        <div className="flex items-center gap-3">
+                                            {loc.foto_media ? (
+                                                <img src={`/storage/${loc.foto_media}`} alt="Media" className="w-10 h-10 rounded-lg object-cover" />
+                                            ) : (
+                                                <div className="w-10 h-10 rounded-lg bg-gray-200 flex items-center justify-center text-gray-400">
+                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                                                    </svg>
+                                                </div>
+                                            )}
+                                            <div>
+                                                <p className="text-sm font-bold text-gray-900">{loc.nama_lokasi}</p>
+                                                <p className="text-[10px] text-gray-500">Kapasitas: {loc.kapasitas}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <button onClick={() => handleEdit(loc)} className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                                                </svg>
+                                            </button>
+                                            <button onClick={() => handleDelete(loc)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ) : (
+                        <form onSubmit={handleSubmit} encType="multipart/form-data">
+                            <div className="mb-4">
+                                <InputLabel htmlFor="nama_lokasi" value="Nama Blok / Lokasi" />
+                                <TextInput
+                                    id="nama_lokasi"
+                                    type="text"
+                                    value={data.nama_lokasi}
+                                    onChange={(e) => setData('nama_lokasi', e.target.value)}
+                                    className="input-field mt-1.5"
+                                    placeholder="Contoh: Modul A1"
+                                    required
+                                />
+                                <InputError message={errors.nama_lokasi} className="mt-2" />
+                            </div>
+
+                            <div className="mb-4">
+                                <InputLabel htmlFor="kapasitas" value="Kapasitas (Lubang Tanam)" />
+                                <TextInput
+                                    id="kapasitas"
+                                    type="number"
+                                    value={data.kapasitas}
+                                    onChange={(e) => setData('kapasitas', e.target.value)}
+                                    className="input-field mt-1.5"
+                                    placeholder="Contoh: 200"
+                                    required
+                                />
+                                <InputError message={errors.kapasitas} className="mt-2" />
+                            </div>
+
+                            <div className="mb-6">
+                                <InputLabel htmlFor="foto_media" value="Foto Media (Opsional)" />
+                                <input
+                                    id="foto_media"
+                                    type="file"
+                                    onChange={(e) => setData('foto_media', e.target.files[0])}
+                                    className="mt-1.5 block w-full text-xs text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200 transition-colors"
+                                    accept="image/*"
+                                />
+                                <InputError message={errors.foto_media} className="mt-2" />
+                            </div>
+
+                            <div className="flex justify-end gap-2">
+                                <button type="button" onClick={() => setViewMode('list')} className="btn btn-secondary">
+                                    Batal
+                                </button>
+                                <button type="submit" disabled={processing} className="btn btn-primary">
+                                    {processing ? 'Menyimpan...' : 'Simpan'}
+                                </button>
+                            </div>
+                        </form>
+                    )}
+                </div>
+            </Modal>
         </AuthenticatedLayout>
     );
 }

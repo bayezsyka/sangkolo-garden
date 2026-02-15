@@ -3,10 +3,12 @@ import { Head, Link, useForm } from '@inertiajs/react';
 import InputLabel from '@/Components/InputLabel';
 import TextInput from '@/Components/TextInput';
 import InputError from '@/Components/InputError';
-import { useRef } from 'react';
+import { useState, useRef } from 'react';
+import Modal from '@/Components/Modal';
 
 export default function Show({ auth, batch }) {
     const fileInputRef = useRef(null);
+    const [showHarvestModal, setShowHarvestModal] = useState(false);
 
     const { data, setData, post, processing, errors, reset } = useForm({
         batch_tanam_id: batch.id,
@@ -29,12 +31,37 @@ export default function Show({ auth, batch }) {
 
     const lastLog = batch.jurnal_kebuns && batch.jurnal_kebuns.length > 0 ? batch.jurnal_kebuns[0] : null;
 
+    const { 
+        data: harvestData, 
+        setData: setHarvestData, 
+        post: postHarvest, 
+        processing: harvestProcessing, 
+        errors: harvestErrors,
+        reset: resetHarvest
+    } = useForm({
+        batch_id: batch.id,
+        total_berat_panen: '',
+        jumlah_panen_layak: batch.jumlah_tanaman,
+        jumlah_afkir: 0,
+        catatan_panen: '',
+    });
+
     const submitJournal = (e) => {
         e.preventDefault();
         post(route('maintenance.store'), {
             onSuccess: () => {
                 reset('ppm_nutrisi', 'ph_air', 'suhu_air', 'catatan', 'foto_kondisi');
                 if(fileInputRef.current) fileInputRef.current.value = "";
+            },
+        });
+    };
+
+    const submitHarvest = (e) => {
+        e.preventDefault();
+        postHarvest(route('harvest.store'), {
+            onSuccess: () => {
+                setShowHarvestModal(false);
+                resetHarvest();
             },
         });
     };
@@ -48,15 +75,31 @@ export default function Show({ auth, batch }) {
                     <div>
                         <h1 className="text-xl font-bold text-gray-900 tracking-tight">Detail Perawatan</h1>
                         <p className="text-xs text-gray-400 mt-0.5">
-                            <span className="font-mono">{batch.kode_batch}</span> — {batch.master_varietas?.nama_varietas}
+                            <span className="font-mono">{batch.kode_batch}</span> — {batch.nama_custom || batch.master_varietas?.nama_varietas}
+                            {batch.lokasi_saat_ini && (
+                                <span className="ml-2 px-1.5 py-0.5 bg-gray-100 rounded text-[10px] text-gray-500">
+                                    {batch.lokasi_saat_ini.nama_lokasi}
+                                </span>
+                            )}
                         </p>
                     </div>
-                    <Link href={route('production.index')} className="btn btn-ghost text-xs gap-1">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-                        </svg>
-                        Kembali
-                    </Link>
+                    <div className="flex items-center gap-2">
+                        <button 
+                            onClick={() => setShowHarvestModal(true)}
+                            className="btn btn-primary text-xs gap-1.5"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+                            </svg>
+                            Selesai Panen
+                        </button>
+                        <Link href={route('production.index')} className="btn btn-ghost text-xs gap-1">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+                            </svg>
+                            Kembali
+                        </Link>
+                    </div>
                 </div>
             }
         >
@@ -242,6 +285,80 @@ export default function Show({ auth, batch }) {
                     </div>
                 </div>
             </div>
+
+            {/* Harvest Modal */}
+            <Modal show={showHarvestModal} onClose={() => setShowHarvestModal(false)}>
+                <div className="p-6">
+                    <div className="mb-6">
+                        <h2 className="text-lg font-bold text-gray-900">Konfirmasi Panen</h2>
+                        <p className="text-xs text-gray-400 mt-1">Batch {batch.kode_batch} — Masukkan data hasil panen akhir.</p>
+                    </div>
+
+                    <form onSubmit={submitHarvest} className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <InputLabel htmlFor="total_berat_panen" value="Total Berat (Kg)" />
+                                <TextInput
+                                    id="total_berat_panen"
+                                    type="number"
+                                    step="0.01"
+                                    value={harvestData.total_berat_panen}
+                                    onChange={(e) => setHarvestData('total_berat_panen', e.target.value)}
+                                    className="input-field mt-1.5"
+                                    placeholder="Contoh: 12.5"
+                                    required
+                                />
+                                <InputError message={harvestErrors.total_berat_panen} className="mt-2" />
+                            </div>
+                            <div>
+                                <InputLabel htmlFor="jumlah_panen_layak" value="Jumlah Layak (Pcs)" />
+                                <TextInput
+                                    id="jumlah_panen_layak"
+                                    type="number"
+                                    value={harvestData.jumlah_panen_layak}
+                                    onChange={(e) => setHarvestData('jumlah_panen_layak', e.target.value)}
+                                    className="input-field mt-1.5"
+                                    required
+                                />
+                                <InputError message={harvestErrors.jumlah_panen_layak} className="mt-2" />
+                            </div>
+                        </div>
+
+                        <div>
+                            <InputLabel htmlFor="jumlah_afkir" value="Jumlah Afkir / Rusak" />
+                            <TextInput
+                                id="jumlah_afkir"
+                                type="number"
+                                value={harvestData.jumlah_afkir}
+                                onChange={(e) => setHarvestData('jumlah_afkir', e.target.value)}
+                                className="input-field mt-1.5"
+                            />
+                            <InputError message={harvestErrors.jumlah_afkir} className="mt-2" />
+                        </div>
+
+                        <div>
+                            <InputLabel htmlFor="catatan_panen" value="Catatan Panen (Opsional)" />
+                            <textarea
+                                id="catatan_panen"
+                                value={harvestData.catatan_panen}
+                                onChange={(e) => setHarvestData('catatan_panen', e.target.value)}
+                                className="input-field mt-1.5 h-20 resize-none"
+                                placeholder="Tulis catatan mengenai hasil panen..."
+                            />
+                            <InputError message={harvestErrors.catatan_panen} className="mt-2" />
+                        </div>
+
+                        <div className="flex justify-end gap-2 pt-2">
+                            <button type="button" onClick={() => setShowHarvestModal(false)} className="btn btn-secondary">
+                                Batal
+                            </button>
+                            <button type="submit" disabled={harvestProcessing} className="btn btn-primary">
+                                {harvestProcessing ? 'Menyimpan...' : 'Simpan & Selesaikan'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </Modal>
         </AuthenticatedLayout>
     );
 }

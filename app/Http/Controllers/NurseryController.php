@@ -30,39 +30,33 @@ class NurseryController extends Controller
             $groupedBatches[$batch->fase_saat_ini][] = $batch;
         }
 
-        // Get available production locations (not currently occupied by a production batch)
-        $availableLocations = MasterLokasi::where('tipe_lokasi', 'produksi_hidroponik')
-            ->whereDoesntHave('batchTanams', function ($query) {
-                // Assuming a location is occupied if it has a batch in 'produksi' phase
-                $query->where('fase_saat_ini', 'produksi');
-            })
-            ->get();
+        // Locations for each phase
+        $locations = [
+            'semai' => MasterLokasi::where('tipe_lokasi', 'semai')->get(),
+            'pemeraman' => MasterLokasi::where('tipe_lokasi', 'pemeraman')->get(),
+            'semai_tray' => MasterLokasi::where('tipe_lokasi', 'semai_tray')->get(),
+            'produksi' => MasterLokasi::where('tipe_lokasi', 'produksi_hidroponik')
+                ->whereDoesntHave('batchTanams', function ($query) {
+                    $query->where('fase_saat_ini', 'produksi');
+                })->get(),
+        ];
 
         return Inertia::render('Nursery/Index', [
             'batches' => $groupedBatches,
             'varieties' => MasterVarietas::select('id', 'nama_varietas')->get(),
-            'availableLocations' => $availableLocations,
+            'locations' => $locations,
         ]);
     }
 
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'master_varietas_id' => 'required|exists:master_varietas,id',
+            'nama_tanaman' => 'required|string|max:255',
             'jumlah_tanaman' => 'required|integer|min:1',
+            'tanggal_tanam' => 'required|date',
+            'nama_lokasi' => 'required|string|max:255',
+            'foto_media' => 'nullable|image|max:2048',
         ]);
-
-        // Find a default location for 'semai'
-        $location = MasterLokasi::where('tipe_lokasi', 'semai')->first();
-
-        if (!$location) {
-            // Fallback: create a default location if none exists just to keep the app working
-            $location = MasterLokasi::create([
-                'nama_lokasi' => 'Ruang Semai Umum',
-                'tipe_lokasi' => 'semai',
-                'kapasitas' => 1000
-            ]);
-        }
 
         $code = 'BATCH-' . date('Ymd') . '-' . rand(100, 999);
         // Ensure uniqueness
@@ -70,40 +64,78 @@ class NurseryController extends Controller
             $code = 'BATCH-' . date('Ymd') . '-' . rand(100, 999);
         }
 
+        $photoPath = null;
+        if ($request->hasFile('foto_media')) {
+            $photoPath = $request->file('foto_media')->store('uploads/media', 'public');
+        }
+
+        $location = MasterLokasi::firstOrCreate(
+            ['nama_lokasi' => $validated['nama_lokasi'], 'tipe_lokasi' => 'semai'],
+            ['kapasitas' => 100]
+        );
+
         BatchTanam::create([
             'kode_batch' => $code,
-            'master_varietas_id' => $validated['master_varietas_id'],
+            'master_varietas_id' => null,
+            'nama_custom' => $validated['nama_tanaman'],
             'lokasi_saat_ini_id' => $location->id,
             'jumlah_tanaman' => $validated['jumlah_tanaman'],
             'fase_saat_ini' => 'persiapan_benih',
-            'tanggal_mulai' => now(),
-            'metode_tanam' => 'hidroponik', // Default as per requirements
+            'tanggal_mulai' => $validated['tanggal_tanam'],
+            'metode_tanam' => 'hidroponik',
+            'foto_media' => $photoPath,
         ]);
 
         return redirect()->route('nursery.index')->with('success', 'Batch baru berhasil dibuat.');
     }
 
+    public function update(Request $request, BatchTanam $batch)
+    {
+        $validated = $request->validate([
+            'nama_custom' => 'required|string|max:255',
+            'jumlah_tanaman' => 'required|integer|min:1',
+        ]);
+
+        $batch->update($validated);
+
+        return back()->with('success', 'Batch berhasil diperbarui.');
+    }
+
+    public function destroy(BatchTanam $batch)
+    {
+        $batch->delete();
+        return back()->with('success', 'Batch berhasil dihapus.');
+    }
+
     public function updatePhase(Request $request, BatchTanam $batch)
     {
         $validated = $request->validate([
-            'next_phase' => 'required|in:peram,semai_tray,pindah_tanam',
+            'next_phase' => 'required|in:persiapan_benih,peram,semai_tray,pindah_tanam',
+            'nama_lokasi' => 'required_unless:next_phase,pindah_tanam|string|max:255',
         ]);
 
-        // Logic validation (optional but good practice)
-        $currentPhase = $batch->fase_saat_ini;
-        $nextPhase = $validated['next_phase'];
+        $updateData = [
+            'fase_saat_ini' => $validated['next_phase'],
+        ];
 
-        if ($currentPhase === 'persiapan_benih' && $nextPhase !== 'peram') {
-            return back()->withErrors(['phase' => 'Fase selanjutnya harus Pemeraman.']);
+        if ($request->has('nama_lokasi')) {
+            $tipe = match ($validated['next_phase']) {
+                'persiapan_benih' => 'semai',
+                'peram' => 'pemeraman',
+                'semai_tray' => 'semai_tray',
+                default => 'semai'
+            };
+
+            $location = MasterLokasi::firstOrCreate(
+                ['nama_lokasi' => $validated['nama_lokasi'], 'tipe_lokasi' => $tipe],
+                ['kapasitas' => 100]
+            );
+
+            $updateData['lokasi_saat_ini_id'] = $location->id;
         }
-        if ($currentPhase === 'peram' && $nextPhase !== 'semai_tray') {
-            return back()->withErrors(['phase' => 'Fase selanjutnya harus Semai Tray.']);
-        }
 
-        $batch->update([
-            'fase_saat_ini' => $nextPhase,
-        ]);
+        $batch->update($updateData);
 
-        return redirect()->route('nursery.index');
+        return redirect()->route('nursery.index')->with('success', 'Fase batch diperbarui.');
     }
 }

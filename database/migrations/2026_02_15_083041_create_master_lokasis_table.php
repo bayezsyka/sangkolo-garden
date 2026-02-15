@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('master_lokasis', function (Blueprint $table) {
             $table->id();
             $table->string('nama_lokasi');
-            $table->enum('tipe_lokasi', ['semai', 'produksi_hidroponik', 'gudang']);
+            $table->enum('tipe_lokasi', ['semai', 'pemeraman', 'semai_tray', 'produksi_hidroponik', 'gudang']);
             $table->integer('kapasitas');
             $table->timestamps();
         });

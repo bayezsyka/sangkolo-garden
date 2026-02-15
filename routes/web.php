@@ -39,11 +39,16 @@ Route::middleware('auth')->group(function () {
     // Nursery Routes
     Route::get('/nursery', [App\Http\Controllers\NurseryController::class, 'index'])->name('nursery.index');
     Route::post('/nursery', [App\Http\Controllers\NurseryController::class, 'store'])->name('nursery.store');
+    Route::put('/nursery/{batch}', [App\Http\Controllers\NurseryController::class, 'update'])->name('nursery.update');
+    Route::delete('/nursery/{batch}', [App\Http\Controllers\NurseryController::class, 'destroy'])->name('nursery.destroy');
     Route::put('/nursery/{batch}/phase', [App\Http\Controllers\NurseryController::class, 'updatePhase'])->name('nursery.update_phase');
 
     // Production Routes
     Route::get('/production', [App\Http\Controllers\ProductionController::class, 'index'])->name('production.index');
     Route::post('/production/pindah-tanam', [App\Http\Controllers\ProductionController::class, 'storePindahTanam'])->name('production.store_pindah_tanam');
+    Route::post('/production/location', [App\Http\Controllers\ProductionController::class, 'storeLocation'])->name('production.store_location');
+    Route::post('/production/location/{location}', [App\Http\Controllers\ProductionController::class, 'updateLocation'])->name('production.update_location');
+    Route::delete('/production/location/{location}', [App\Http\Controllers\ProductionController::class, 'destroyLocation'])->name('production.destroy_location');
     Route::get('/production/{batch}', [App\Http\Controllers\MaintenanceController::class, 'show'])->name('production.show'); // Show Detail & Maintenance
     Route::post('/maintenance/jurnal', [App\Http\Controllers\MaintenanceController::class, 'store'])->name('maintenance.store');
 
