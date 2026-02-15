@@ -4,13 +4,15 @@ import Modal from '@/Components/Modal';
 import InputLabel from '@/Components/InputLabel';
 import TextInput from '@/Components/TextInput';
 import InputError from '@/Components/InputError';
+import PhaseStopwatch from '@/Components/PhaseStopwatch';
 import { useState } from 'react';
 
-export default function Index({ auth, batches, varieties, locations }) {
+export default function Index({ auth, batches, varieties, locations, server_time }) {
     const [showModal, setShowModal] = useState(false);
     const [showPhaseModal, setShowPhaseModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showTransferModal, setShowTransferModal] = useState(false);
+    const [showHistoryModal, setShowHistoryModal] = useState(false);
     const [selectedBatch, setSelectedBatch] = useState(null);
     const [targetPhase, setTargetPhase] = useState(null);
     
@@ -160,6 +162,30 @@ export default function Index({ auth, batches, varieties, locations }) {
         });
     };
 
+    const openHistoryModal = (batch) => {
+        setSelectedBatch(batch);
+        setShowHistoryModal(true);
+    };
+
+    const formatDuration = (start, end) => {
+        if (!start) return '-';
+        const startTime = new Date(start).getTime();
+        const endTime = end ? new Date(end).getTime() : new Date().getTime();
+        const diffMs = endTime - startTime;
+        
+        const totalSec = Math.floor(diffMs / 1000);
+        const m = Math.floor((totalSec % 3600) / 60);
+        const h = Math.floor((totalSec % 86400) / 3600);
+        const d = Math.floor(totalSec / 86400);
+
+        let parts = [];
+        if (d > 0) parts.push(`${d}h`);
+        if (h > 0) parts.push(`${h}j`);
+        if (m > 0 || parts.length === 0) parts.push(`${m}m`);
+        
+        return parts.join(' ');
+    };
+
     const columns = [
         {
             key: 'persiapan_benih',
@@ -275,6 +301,14 @@ export default function Index({ auth, batches, varieties, locations }) {
                                             </svg>
                                             <span>{batch.lokasi_saat_ini?.nama_lokasi}</span>
                                         </div>
+
+                                        {/* Phase Timer — Clean Stopwatch */}
+                                        <PhaseStopwatch
+                                            startTime={batch.tanggal_ubah_fase || batch.tanggal_mulai}
+                                            phaseName={col.title}
+                                            serverTime={server_time}
+                                            onClick={() => openHistoryModal(batch)}
+                                        />
 
                                         <div className="flex gap-2 mt-4">
                                             {/* Primary Action Button (Next Phase or Transfer) */}
@@ -549,6 +583,90 @@ export default function Index({ auth, batches, varieties, locations }) {
                             </button>
                         </div>
                     </form>
+                </div>
+            </Modal>
+            {/* Modal Riwayat Fase */}
+            <Modal show={showHistoryModal} onClose={() => setShowHistoryModal(false)} maxWidth="2xl">
+                <div className="p-6">
+                    <div className="flex items-center justify-between mb-6">
+                        <div>
+                            <h2 className="text-lg font-bold text-gray-900">Riwayat Fase</h2>
+                            {selectedBatch && (
+                                <p className="text-xs text-gray-400 mt-1">
+                                    Detail perjalanan <span className="font-semibold">{getBatchName(selectedBatch)}</span>
+                                </p>
+                            )}
+                        </div>
+                        <button onClick={() => setShowHistoryModal(false)} className="text-gray-400 hover:text-gray-600">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div className="overflow-x-auto bg-gray-50 rounded-xl border border-gray-100 mb-4">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead>
+                                <tr className="bg-gray-100/50">
+                                    <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Fase</th>
+                                    <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Lokasi</th>
+                                    <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Waktu Mulai</th>
+                                    <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Waktu Selesai</th>
+                                    <th className="px-4 py-3 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest">Durasi</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200 bg-white">
+                                {selectedBatch?.riwayat_fases?.length > 0 ? (
+                                    selectedBatch.riwayat_fases.map((hist, idx) => (
+                                        <tr key={hist.id} className="hover:bg-gray-50 transition-colors">
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <span className="text-xs font-bold text-gray-900 capitalize">
+                                                    {hist.fase.replace('_', ' ')}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <span className="text-xs text-gray-500">{hist.nama_lokasi || '-'}</span>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <span className="text-xs text-gray-400 font-mono">
+                                                    {hist.tanggal_mulai ? new Date(hist.tanggal_mulai).toLocaleString('id-ID', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <span className="text-xs text-gray-400 font-mono">
+                                                    {hist.tanggal_selesai 
+                                                        ? new Date(hist.tanggal_selesai).toLocaleString('id-ID', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                                                        : <span className="text-blue-500 font-bold px-1.5 py-0.5 bg-blue-50 rounded text-[9px] uppercase tracking-tighter">Berjalan</span>
+                                                    }
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 text-right whitespace-nowrap">
+                                                <span className="text-xs font-bold text-gray-700 font-mono">
+                                                    {formatDuration(hist.tanggal_mulai, hist.tanggal_selesai)}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan="5" className="px-4 py-8 text-center text-xs text-gray-400 italic">
+                                            Belum ada data riwayat fase.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div className="mt-8 flex justify-end">
+                        <button 
+                            type="button" 
+                            onClick={() => setShowHistoryModal(false)}
+                            className="btn btn-secondary"
+                        >
+                            Tutup
+                        </button>
+                    </div>
                 </div>
             </Modal>
         </AuthenticatedLayout>

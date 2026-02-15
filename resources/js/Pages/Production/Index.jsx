@@ -5,11 +5,14 @@ import Modal from '@/Components/Modal';
 import InputLabel from '@/Components/InputLabel';
 import TextInput from '@/Components/TextInput';
 import InputError from '@/Components/InputError';
+import PhaseStopwatch from '@/Components/PhaseStopwatch';
 
-export default function Index({ auth, locations }) {
+export default function Index({ auth, locations, server_time }) {
     const [showManageModal, setShowManageModal] = useState(false);
     const [viewMode, setViewMode] = useState('list'); // 'list', 'form'
     const [editingLocation, setEditingLocation] = useState(null);
+    const [showHistoryModal, setShowHistoryModal] = useState(false);
+    const [selectedBatch, setSelectedBatch] = useState(null);
 
     const { data, setData, post, processing, errors, reset, clearErrors } = useForm({
         nama_lokasi: '',
@@ -17,13 +20,17 @@ export default function Index({ auth, locations }) {
         foto_media: null,
     });
 
-    const calculateAge = (startDate) => {
-        if (!startDate) return 0;
-        const start = new Date(startDate);
-        const now = new Date();
-        const diffTime = Math.abs(now - start);
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        return diffDays;
+    // Phase name mapping for display
+    const getPhaseName = (fase) => {
+        const map = {
+            'persiapan_benih': 'Perendaman',
+            'peram': 'Pemeraman',
+            'semai_tray': 'Semai Tray',
+            'pindah_tanam': 'Pindah Tanam',
+            'produksi': 'Produksi',
+            'panen': 'Panen',
+        };
+        return map[fase] || fase;
     };
 
     const handleOpenManage = () => {
@@ -69,6 +76,30 @@ export default function Index({ auth, locations }) {
         });
     };
 
+    const openHistoryModal = (batch) => {
+        setSelectedBatch(batch);
+        setShowHistoryModal(true);
+    };
+
+    const formatDuration = (start, end) => {
+        if (!start) return '-';
+        const startTime = new Date(start).getTime();
+        const endTime = end ? new Date(end).getTime() : new Date().getTime();
+        const diffMs = endTime - startTime;
+        
+        const totalSec = Math.floor(diffMs / 1000);
+        const m = Math.floor((totalSec % 3600) / 60);
+        const h = Math.floor((totalSec % 86400) / 3600);
+        const d = Math.floor(totalSec / 86400);
+
+        let parts = [];
+        if (d > 0) parts.push(`${d}h`);
+        if (h > 0) parts.push(`${h}j`);
+        if (m > 0 || parts.length === 0) parts.push(`${m}m`);
+        
+        return parts.join(' ');
+    };
+
     const occupiedCount = locations.filter(loc => loc.batch_tanams && loc.batch_tanams.length > 0).length;
     const emptyCount = locations.length - occupiedCount;
 
@@ -101,7 +132,6 @@ export default function Index({ auth, locations }) {
                     {locations.map((loc, index) => {
                         const activeBatch = loc.batch_tanams && loc.batch_tanams.length > 0 ? loc.batch_tanams[0] : null;
                         const isOccupied = !!activeBatch;
-                        const age = activeBatch ? calculateAge(activeBatch.tanggal_mulai) : 0;
                         const batchName = activeBatch ? (activeBatch.nama_custom || activeBatch.master_varietas?.nama_varietas || 'Tanpa Nama') : '';
 
                         return (
@@ -133,17 +163,19 @@ export default function Index({ auth, locations }) {
                                                 </p>
                                             </div>
                                             
-                                            {/* Stats */}
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <div>
-                                                    <p className="text-[10px] text-gray-400 uppercase tracking-wider">Umur</p>
-                                                    <p className="text-lg font-bold text-gray-900 leading-tight">{age}<span className="text-xs text-gray-400 font-normal ml-0.5">hr</span></p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-[10px] text-gray-400 uppercase tracking-wider">Qty</p>
-                                                    <p className="text-lg font-bold text-gray-900 leading-tight">{activeBatch.jumlah_tanaman}</p>
-                                                </div>
+                                            {/* Qty */}
+                                            <div>
+                                                <p className="text-[10px] text-gray-400 uppercase tracking-wider">Qty</p>
+                                                <p className="text-lg font-bold text-gray-900 leading-tight">{activeBatch.jumlah_tanaman}</p>
                                             </div>
+
+                                            {/* Phase Timer — Clean Stopwatch */}
+                                            <PhaseStopwatch
+                                                startTime={activeBatch.tanggal_ubah_fase || activeBatch.tanggal_mulai}
+                                                phaseName={getPhaseName(activeBatch.fase_saat_ini)}
+                                                serverTime={server_time}
+                                                onClick={() => openHistoryModal(activeBatch)}
+                                            />
                                             
                                             {/* Action */}
                                             <Link 
@@ -299,6 +331,90 @@ export default function Index({ auth, locations }) {
                             </div>
                         </form>
                     )}
+                </div>
+            </Modal>
+            {/* Modal Riwayat Fase */}
+            <Modal show={showHistoryModal} onClose={() => setShowHistoryModal(false)} maxWidth="2xl">
+                <div className="p-6">
+                    <div className="flex items-center justify-between mb-6">
+                        <div>
+                            <h2 className="text-lg font-bold text-gray-900">Riwayat Fase</h2>
+                            {selectedBatch && (
+                                <p className="text-xs text-gray-400 mt-1">
+                                    Detail perjalanan <span className="font-semibold">{selectedBatch.nama_custom || selectedBatch.master_varietas?.nama_varietas}</span>
+                                </p>
+                            )}
+                        </div>
+                        <button onClick={() => setShowHistoryModal(false)} className="text-gray-400 hover:text-gray-600">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div className="overflow-x-auto bg-gray-50 rounded-xl border border-gray-100 mb-4">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead>
+                                <tr className="bg-gray-100/50">
+                                    <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Fase</th>
+                                    <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Lokasi</th>
+                                    <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Waktu Mulai</th>
+                                    <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Waktu Selesai</th>
+                                    <th className="px-4 py-3 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest">Durasi</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200 bg-white">
+                                {selectedBatch?.riwayat_fases?.length > 0 ? (
+                                    selectedBatch.riwayat_fases.map((hist, idx) => (
+                                        <tr key={hist.id} className="hover:bg-gray-50 transition-colors">
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <span className="text-xs font-bold text-gray-900 capitalize">
+                                                    {getPhaseName(hist.fase)}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <span className="text-xs text-gray-500">{hist.nama_lokasi || '-'}</span>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <span className="text-xs text-gray-400 font-mono">
+                                                    {hist.tanggal_mulai ? new Date(hist.tanggal_mulai).toLocaleString('id-ID', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <span className="text-xs text-gray-400 font-mono">
+                                                    {hist.tanggal_selesai 
+                                                        ? new Date(hist.tanggal_selesai).toLocaleString('id-ID', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                                                        : <span className="text-blue-500 font-bold px-1.5 py-0.5 bg-blue-50 rounded text-[9px] uppercase tracking-tighter">Berjalan</span>
+                                                    }
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 text-right whitespace-nowrap">
+                                                <span className="text-xs font-bold text-gray-700 font-mono">
+                                                    {formatDuration(hist.tanggal_mulai, hist.tanggal_selesai)}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan="5" className="px-4 py-8 text-center text-xs text-gray-400 italic">
+                                            Belum ada data riwayat fase.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div className="mt-8 flex justify-end">
+                        <button 
+                            type="button" 
+                            onClick={() => setShowHistoryModal(false)}
+                            className="btn btn-secondary"
+                        >
+                            Tutup
+                        </button>
+                    </div>
                 </div>
             </Modal>
         </AuthenticatedLayout>

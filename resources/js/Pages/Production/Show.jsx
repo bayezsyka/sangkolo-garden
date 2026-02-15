@@ -5,8 +5,9 @@ import TextInput from '@/Components/TextInput';
 import InputError from '@/Components/InputError';
 import { useState, useRef } from 'react';
 import Modal from '@/Components/Modal';
+import PhaseStopwatch from '@/Components/PhaseStopwatch';
 
-export default function Show({ auth, batch }) {
+export default function Show({ auth, batch, server_time }) {
     const fileInputRef = useRef(null);
     const [showHarvestModal, setShowHarvestModal] = useState(false);
 
@@ -124,6 +125,15 @@ export default function Show({ auth, batch }) {
                         <p className="stat-label">pH Terakhir</p>
                         <p className="stat-value">{lastLog?.ph_air || '—'}</p>
                     </div>
+                </div>
+
+                {/* Phase Timer — Clean Stopwatch */}
+                <div className="card-flat px-5 py-3 mb-6 animate-fade-in-up stagger-1" style={{ opacity: 0 }}>
+                    <PhaseStopwatch
+                        startTime={batch.tanggal_ubah_fase || batch.tanggal_mulai}
+                        phaseName="Produksi"
+                        serverTime={server_time}
+                    />
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

@@ -8,6 +8,8 @@ use App\Models\RiwayatAktivitas;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
+use App\Models\RiwayatFaseTanam;
 
 class ProductionController extends Controller
 {
@@ -18,12 +20,13 @@ class ProductionController extends Controller
         $locations = MasterLokasi::where('tipe_lokasi', 'produksi_hidroponik')
             ->with(['batchTanams' => function ($query) {
                 $query->where('fase_saat_ini', 'produksi')
-                    ->with('masterVarietas'); // Load variety info for display
+                    ->with(['masterVarietas', 'riwayatFases']); // Load variety info and history
             }])
             ->get();
 
         return Inertia::render('Production/Index', [
             'locations' => $locations,
+            'server_time' => Carbon::now()->toIso8601String(),
         ]);
     }
 
@@ -41,13 +44,25 @@ class ProductionController extends Controller
         DB::transaction(function () use ($batch, $targetLocation, $validated, $request) {
             $oldLocationName = $batch->lokasiSaatIni ? $batch->lokasiSaatIni->nama_lokasi : 'Tidak Diketahui';
 
+            // Update previous phase history record
+            RiwayatFaseTanam::where('batch_tanam_id', $batch->id)
+                ->whereNull('tanggal_selesai')
+                ->update(['tanggal_selesai' => Carbon::now()]);
+
             // Update Batch
             $batch->update([
                 'lokasi_saat_ini_id' => $targetLocation->id,
                 'jumlah_tanaman' => $validated['jumlah_tanaman_hidup'],
                 'fase_saat_ini' => 'produksi',
-                // Assuming 'tanggal_pindah_tanam' might be useful, but not in current schema.
-                // Keeping it simple as per request.
+                'tanggal_ubah_fase' => Carbon::now(),
+            ]);
+
+            // Create new phase history record
+            RiwayatFaseTanam::create([
+                'batch_tanam_id' => $batch->id,
+                'fase' => 'produksi',
+                'tanggal_mulai' => Carbon::now(),
+                'nama_lokasi' => $targetLocation->nama_lokasi,
             ]);
 
             // Create Activity History

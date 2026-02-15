@@ -18,6 +18,7 @@ class MaintenanceController extends Controller
 
         return Inertia::render('Production/Show', [
             'batch' => $batch,
+            'server_time' => \Carbon\Carbon::now()->toIso8601String(),
         ]);
     }
 

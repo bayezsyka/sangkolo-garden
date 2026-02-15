@@ -10,6 +10,7 @@ class BatchTanam extends Model
 
     protected $casts = [
         'tanggal_mulai' => 'datetime',
+        'tanggal_ubah_fase' => 'datetime',
         'tanggal_panen_aktual' => 'date',
     ];
 
@@ -28,6 +29,11 @@ class BatchTanam extends Model
     public function lokasiSaatIni()
     {
         return $this->belongsTo(MasterLokasi::class, 'lokasi_saat_ini_id');
+    }
+
+    public function riwayatFases()
+    {
+        return $this->hasMany(RiwayatFaseTanam::class);
     }
 
     public function jurnalKebuns()
